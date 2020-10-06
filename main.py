@@ -9,7 +9,7 @@ from googleapiclient.http import MediaFileUpload
 import firebase_admin
 from firebase_admin import firestore
 
-
+# flask
 from flask import Flask
 
 
@@ -19,7 +19,7 @@ os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 @app.route('/')
 def hello():
-    return 'hello test'
+    return 'hello gae test'
 
 
 @app.route('/drive')
