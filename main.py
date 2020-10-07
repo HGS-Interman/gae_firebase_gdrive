@@ -1,6 +1,11 @@
-# Google Drive
 from __future__ import print_function
+from flask import Flask, request, make_response, jsonify
 import os.path
+import werkzeug
+import datetime
+import mimetypes
+
+# Google Drive
 from googleapiclient.discovery import build
 from google.oauth2.service_account import Credentials
 from googleapiclient.http import MediaFileUpload
@@ -9,57 +14,70 @@ from googleapiclient.http import MediaFileUpload
 import firebase_admin
 from firebase_admin import firestore
 
-# flask
-from flask import Flask
 
-
+TMP_FOLDER = '/tmp/'
 app = Flask(__name__)
-os.chdir(os.path.dirname(os.path.abspath(__file__)))
+
+@app.route('/', methods=['POST'])
+def upload_multipart():
+    '''ファイルアップロード'''
+    app.logger.debug('upload_multipart')
+    if 'uploadFile' not in request.files:
+        make_response(jsonify({'result':'uploadFileが必要です'}))
+    app.logger.debug(f'request.files:{request.files}')
+    upload_file = request.files['uploadFile']
+    folder_id = '1Y8EKzqUJIx467rTh0f8zaw9O_fP_kExL'
+    
+    fileName = upload_file.filename
+    if '' == fileName:
+        make_response(jsonify({'result':'filenameが空です。filenameを指定してください。'}))
+
+    saveFileName = werkzeug.utils.secure_filename(fileName)
+    temp_filepath = os.path.join(TMP_FOLDER, saveFileName)
+    upload_file.save(temp_filepath)
+
+    drive_file = upload_google_drive_upload(temp_filepath, folder_id)
+
+    firebase_data = {'filename':fileName, 'drive_file':drive_file, 'timestamp':datetime.datetime.now().isoformat(), 'result':'upload ok'}
+
+    add_firestore('file_upload', fileName, firebase_data)
+
+    return make_response(jsonify(firebase_data))
 
 
-@app.route('/')
-def hello():
-    return 'hello gae test'
+@app.route('/', methods=['GET'])
+def show_upload_form():
+    html =  '<html><body><form method="post" action="/" enctype="multipart/form-data">'\
+            '<h2>Googleドライブにアップロードします</h2>'\
+            '<p>Google Drive Folder ID: 1Y8EKzqUJIx467rTh0f8zaw9O_fP_kExL'\
+            '<p>Upload File: '\
+            '<input type="file" name="uploadFile"></p>'\
+            '<p></p><input type="submit" value="アップロード">'\
+            '</body></html>'
+    
+    return html
 
 
-@app.route('/drive')
-def drive():
-    # サービスアカウントのcredentialsを作成
+def upload_google_drive_upload(filepath, parents_folder_id=None):
+    '''GoogleDriveにアップロードする'''
+    # mimetypeを取得
+    file_basename = os.path.basename(filepath)
+    mimetype = mimetypes.guess_type(file_basename)[0]
+    if parents_folder_id:
+        file_metadata = {'name': file_basename,'mimetype': mimetype, 'parents':[parents_folder_id] }
+    else:
+        file_metadata = {'name': file_basename,'mimetype': mimetype}
+    
     creds = Credentials.from_service_account_file('drive_service_account.json')
-
-    # Google Drive API v3 
     drive_service = build('drive', 'v3', credentials=creds)
-    # メタデータを設定
-    file_metadata = {'name': 'hoge.txt','mimetype': 'text/html', 'parents':['******************'] }
-
-    # アップロード用のローカルファイルを設定
-    media = MediaFileUpload('hoge.txt', mimetype = 'text/html')
-
-    # アップロード実行
+    media = MediaFileUpload(filepath, mimetype = mimetype)
     file = drive_service.files().create(body=file_metadata,
                                         media_body=media,
                                         fields='id').execute()
+    return file
 
-    # ファイルのリストを表示
-    results = drive_service.files().list(
-        pageSize=10, fields="nextPageToken, files(id, name)").execute()
 
-    items = results.get('files', [])
-
-    if not items:
-        res = 'No files found.'
-    else:
-        res ='Files:'
-        for item in items:
-            res = res + (u'{0} ({1}), '.format(item['name'], item['id']))
-
-    res = res + '\r\n' + (f'upload File ID: {file.get("id")}')
-    return res
-
-@app.route('/firebase')
-def firebase():
-    '''firebaseの動作確認
-    '''
+def add_firestore(collection, document, data):
     # credentialsの作成
     cred = firebase_admin.credentials.Certificate("firebase_service_account.json")
     # firebase_admin初期化
@@ -68,14 +86,11 @@ def firebase():
     db = firestore.client()
 
     # firestoreに追加
-    doc_ref = db.collection(u'users').document(u'alovelace')
-    doc_ref.set({
-        u'first': u'Ada',
-        u'last': u'Lovelace',
-        u'born': 1815
-    })
+    doc_ref = db.collection(collection).document(document)
+    doc_ref.set(data)
 
-    return 'ok'
 
-if __name__ == '__main__':
-    app.run(host='127.0.0.1', port=8080, debug=True)
+# main
+if __name__ == "__main__":
+    print(app.url_map)
+    app.run(host='localhost', port=8000, debug=True)
