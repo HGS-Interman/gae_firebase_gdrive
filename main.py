@@ -49,7 +49,7 @@ def upload_multipart():
 def show_upload_form():
     html =  '<html><body><form method="post" action="/" enctype="multipart/form-data">'\
             '<h2>Googleドライブにアップロードします</h2>'\
-            '<p>Google Drive Folder ID: 1Y8EKzqUJIx467rTh0f8zaw9O_fP_kExL'\
+            '<p>Google Drive Folder ID: <a href="https://drive.google.com/drive/u/0/folders/1Y8EKzqUJIx467rTh0f8zaw9O_fP_kExL">1Y8EKzqUJIx467rTh0f8zaw9O_fP_kExL</a>'\
             '<p>Upload File: '\
             '<input type="file" name="uploadFile"></p>'\
             '<p></p><input type="submit" value="アップロード">'\
